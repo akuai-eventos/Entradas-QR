@@ -60,6 +60,37 @@
   brandSubtitle.textContent = config.subtitle;
   aboutVersion.textContent = `${config.appName} · Versión ${config.version}`;
 
+  function limpiarCodigo(raw) {
+    const text = String(raw || "").trim().toUpperCase();
+
+    const match = text.match(/(?:LAI|AREFEST|AKUAI)-\d+/i);
+
+    return match ? match[0].toUpperCase() : text;
+  }
+
+  function normalizarTexto(value) {
+    return String(value || "")
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function esPagoConfirmado(value) {
+    const v = normalizarTexto(value);
+
+    return (
+      v === "VALIDADO" ||
+      v === "PAGO VALIDADO" ||
+      v === "SI CONFIRMADO" ||
+      v === "SÍ CONFIRMADO" ||
+      v === "CONFIRMADO" ||
+      v === "APROBADO" ||
+      v === "CORTESIA" ||
+      v === "CORTESÍA"
+    );
+  }
+
   function setActiveTab(key) {
     Object.values(screens).forEach(s => s.classList.add("hidden"));
     Object.values(tabs).forEach(t => t.classList.remove("active"));
@@ -78,6 +109,7 @@
       document.documentElement.removeAttribute("data-theme");
       darkLabel.textContent = "Desactivado";
     }
+
     storage.setTheme(theme);
   }
 
@@ -87,20 +119,37 @@
     historyList.innerHTML = "";
 
     if (entries.length === 0) {
-      historyList.innerHTML = `<p class="tiny">Aún no hay entradas registradas en este teléfono.</p>`;
+      historyList.innerHTML = `<p class="tiny">Aún no hay ingresos registrados en este teléfono.</p>`;
       return;
     }
 
     for (const e of entries) {
       const row = document.createElement("div");
       row.className = "row";
+
       row.innerHTML = `
         <div class="left">
-          <div class="title">${ui.escapeHtml(e.name)}</div>
+          <div class="title">${ui.escapeHtml(e.name || "Sin nombre")}</div>
           <div class="meta">🕒 ${ui.fmt(e.ts)}</div>
+          <div class="meta">${ui.escapeHtml(e.code || "")}</div>
+
+          <div class="history-details hidden">
+            <div><strong>Cédula:</strong> ${ui.escapeHtml(e.cedula || "-")}</div>
+            <div><strong>WhatsApp:</strong> ${ui.escapeHtml(e.whatsapp || "-")}</div>
+            <div><strong>Email:</strong> ${ui.escapeHtml(e.email || "-")}</div>
+            <div><strong>Grupo:</strong> ${ui.escapeHtml(e.id_grupo || "-")}</div>
+            <div><strong>Modalidad:</strong> ${ui.escapeHtml(e.modalidad || "-")}</div>
+            <div><strong>Categoría:</strong> ${ui.escapeHtml(e.category || "-")}</div>
+          </div>
         </div>
-        <div class="badge" style="white-space:nowrap;">${ui.escapeHtml(e.category)}</div>
+        <div class="badge" style="white-space:nowrap;">${ui.escapeHtml(e.category || "Entrada")}</div>
       `;
+
+      row.addEventListener("click", () => {
+        const details = row.querySelector(".history-details");
+        if (details) details.classList.toggle("hidden");
+      });
+
       historyList.appendChild(row);
     }
   }
@@ -115,14 +164,17 @@
 
   function flashScreen(type) {
     if (!scanFlash) return;
+
     scanFlash.className = "scan-flash";
     scanFlash.classList.add(type === "ok" ? "ok" : "bad");
     scanFlash.classList.add("show");
+
     setTimeout(() => scanFlash.classList.remove("show"), 220);
   }
 
   function vibratePattern(type) {
     if (!("vibrate" in navigator)) return;
+
     if (type === "ok") {
       navigator.vibrate([80]);
     } else {
@@ -176,6 +228,34 @@
     }, 30);
   }
 
+  function renderEntrada(att) {
+    const safeName = ui.escapeHtml(att.name || "—");
+    const safeCedula = ui.escapeHtml(att.cedula || "-");
+    const safeWhatsapp = ui.escapeHtml(att.whatsapp || "-");
+    const safeEmail = ui.escapeHtml(att.email || "-");
+    const safeCategory = ui.escapeHtml(att.category || "Entrada");
+    const safeCode = ui.escapeHtml(att.code || "—");
+    const safeGrupo = ui.escapeHtml(att.id_grupo || "-");
+    const safeModalidad = ui.escapeHtml(att.modalidad || "-");
+    const safePago = ui.escapeHtml(att.confirmacion_pago || "-");
+
+    mName.innerHTML = `
+      ${safeName}
+      <div class="tiny">CI: ${safeCedula}</div>
+      <div class="tiny">📱 ${safeWhatsapp}</div>
+    `;
+
+    mCat.innerHTML = safeCategory;
+
+    mCode.innerHTML = `
+      <div class="tiny"><strong>Código:</strong> ${safeCode}</div>
+      <div class="tiny"><strong>Grupo:</strong> ${safeGrupo}</div>
+      <div class="tiny"><strong>Modalidad:</strong> ${safeModalidad}</div>
+      <div class="tiny"><strong>Email:</strong> ${safeEmail}</div>
+      <div class="tiny"><strong>Pago:</strong> ${safePago}</div>
+    `;
+  }
+
   function openModal(att, state) {
     currentAttendee = att || null;
     resetModalStates();
@@ -195,35 +275,44 @@
 
     const photoUrl = ui.toDriveDirectUrl(att.photo);
     setAvatar(photoUrl);
-
-    mName.textContent = att.name || "—";
-    mCat.textContent = att.category || "—";
-    mCode.textContent = att.code || "—";
+    renderEntrada(att);
 
     const dupGlobal = !!att.checked_in;
     const dupLocal = storage.alreadyLocal(att.code);
+
+    if (!esPagoConfirmado(att.confirmacion_pago)) {
+      mStatusBad.textContent = "❌ Pago no validado";
+      mStatusBad.classList.remove("hidden");
+      mMsg.textContent = "Esta entrada existe, pero Finanzas aún no ha validado el pago. No se puede registrar el ingreso.";
+      proFeedback("bad");
+      modalBackdrop.style.display = "flex";
+      return;
+    }
 
     if (dupGlobal) {
       mStatusOk.textContent = "✅ Ya ingresó";
       mStatusOk.classList.remove("hidden");
       btnAlready.classList.remove("hidden");
-      mMsg.textContent = `Ya ingresó · ${ui.fmt(att.checked_at) || att.checked_at || ""}`;
+      mMsg.textContent = `Ingreso registrado · ${ui.fmt(att.checked_at) || att.checked_at || ""}`;
       proFeedback("ok");
       modalBackdrop.style.display = "flex";
       return;
     }
 
     if (dupLocal) {
-      mStatusOk.textContent = "✅ Ya registrado";
+      mStatusOk.textContent = "✅ Ya registrado en este teléfono";
       mStatusOk.classList.remove("hidden");
       btnAlready.classList.remove("hidden");
-      mMsg.textContent = "Ya registrado en este teléfono.";
+      mMsg.textContent = "Esta entrada ya fue marcada como ingresada desde este dispositivo.";
       proFeedback("ok");
       modalBackdrop.style.display = "flex";
       return;
     }
 
+    btnRegister.disabled = false;
+    btnRegister.textContent = "Registrar ingreso";
     btnRegister.classList.remove("hidden");
+    mMsg.textContent = "Entrada validada. Lista para registrar ingreso.";
     proFeedback("ok");
     modalBackdrop.style.display = "flex";
   }
@@ -278,30 +367,14 @@
   function explainCameraError(err) {
     const msg = String(err?.message || err || "");
 
-    if (msg.includes("SECURE_CONTEXT_REQUIRED")) {
-      return "❌ La cámara requiere HTTPS o localhost.";
-    }
-    if (msg.includes("MEDIA_DEVICES_UNAVAILABLE")) {
-      return "❌ Este navegador no expone mediaDevices.";
-    }
-    if (msg.includes("GET_USER_MEDIA_UNAVAILABLE")) {
-      return "❌ Este navegador no soporta getUserMedia.";
-    }
-    if (msg.includes("NO_CAMERAS_FOUND")) {
-      return "❌ No se encontró ninguna cámara disponible.";
-    }
-    if (msg.toLowerCase().includes("notallowed")) {
-      return "❌ Permiso de cámara denegado.";
-    }
-    if (msg.toLowerCase().includes("permission")) {
-      return "❌ Permiso de cámara bloqueado.";
-    }
-    if (msg.toLowerCase().includes("notreadable")) {
-      return "❌ La cámara está en uso por otra app.";
-    }
-    if (msg.toLowerCase().includes("overconstrained")) {
-      return "❌ No se pudo usar esa cámara del dispositivo.";
-    }
+    if (msg.includes("SECURE_CONTEXT_REQUIRED")) return "❌ La cámara requiere HTTPS o localhost.";
+    if (msg.includes("MEDIA_DEVICES_UNAVAILABLE")) return "❌ Este navegador no expone mediaDevices.";
+    if (msg.includes("GET_USER_MEDIA_UNAVAILABLE")) return "❌ Este navegador no soporta getUserMedia.";
+    if (msg.includes("NO_CAMERAS_FOUND")) return "❌ No se encontró ninguna cámara disponible.";
+    if (msg.toLowerCase().includes("notallowed")) return "❌ Permiso de cámara denegado.";
+    if (msg.toLowerCase().includes("permission")) return "❌ Permiso de cámara bloqueado.";
+    if (msg.toLowerCase().includes("notreadable")) return "❌ La cámara está en uso por otra app.";
+    if (msg.toLowerCase().includes("overconstrained")) return "❌ No se pudo usar esa cámara del dispositivo.";
 
     return `❌ Error de cámara: ${msg || "desconocido"}`;
   }
@@ -311,6 +384,7 @@
 
     scannerActive = true;
     handlingScan = false;
+
     scanIdle.classList.add("hidden");
     scanLive.classList.remove("hidden");
     btnStart.classList.add("hidden");
@@ -344,6 +418,14 @@
 
   async function handleScan(code) {
     if (handlingScan) return;
+
+    code = limpiarCodigo(code);
+
+    if (!code) {
+      camStatus.textContent = "Código vacío.";
+      return;
+    }
+
     handlingScan = true;
 
     try {
@@ -358,7 +440,8 @@
       }
 
       openModal(data.attendee);
-    } catch {
+    } catch (error) {
+      console.warn("Error procesando código:", error);
       openModal(null, "notfound");
     } finally {
       handlingScan = false;
@@ -369,7 +452,7 @@
     if (!currentAttendee) return;
 
     btnRegister.disabled = true;
-    mMsg.textContent = "Registrando...";
+    mMsg.textContent = "Registrando ingreso...";
 
     try {
       const res = await api.checkin(currentAttendee.code);
@@ -379,30 +462,42 @@
         mStatusOk.textContent = "✅ Ya ingresó";
         mStatusOk.classList.remove("hidden");
         btnAlready.classList.remove("hidden");
-        mMsg.textContent = `Ya ingresó · ${ui.fmt(res.checked_at) || res.checked_at || ""}`;
+        mMsg.textContent = `Ingreso registrado · ${ui.fmt(res.checked_at) || res.checked_at || ""}`;
         proFeedback("ok");
+        return;
+      }
+
+      if (!res?.ok && res?.status === "pago_no_validado") {
+        resetModalStates();
+        mStatusBad.textContent = "❌ Pago no validado";
+        mStatusBad.classList.remove("hidden");
+        mMsg.textContent = "Finanzas aún no ha validado el pago de esta entrada.";
+        proFeedback("bad");
         return;
       }
 
       if (res?.ok) {
         currentAttendee.checked_in = true;
-        currentAttendee.checked_at = res.checked_at || "";
+        currentAttendee.checked_at = res.checked_at || res.delivered_at || new Date().toISOString();
+
         storage.addLocal(currentAttendee);
 
         resetModalStates();
-        mStatusOk.textContent = "✅ Entrada registrada";
+        mStatusOk.textContent = "✅ Ingreso registrado";
         mStatusOk.classList.remove("hidden");
         btnAlready.classList.remove("hidden");
-        mMsg.textContent = `Entrada registrada · ${ui.fmt(res.checked_at) || res.checked_at || ""}`;
+        mMsg.textContent = `Ingreso · ${ui.fmt(currentAttendee.checked_at) || currentAttendee.checked_at || ""}`;
         proFeedback("ok");
+
         setTimeout(closeModal, 900);
         return;
       }
 
-      mMsg.textContent = "❌ No se pudo registrar.";
+      mMsg.textContent = "❌ No se pudo registrar el ingreso.";
       proFeedback("bad");
-    } catch {
-      mMsg.textContent = "❌ Error registrando.";
+    } catch (error) {
+      console.warn("Error registrando ingreso:", error);
+      mMsg.textContent = "❌ Error registrando el ingreso.";
       proFeedback("bad");
     } finally {
       btnRegister.disabled = false;
@@ -410,8 +505,14 @@
   }
 
   async function handleManualSearch() {
-    const code = manualCode.value.trim();
-    if (!code) return;
+    const code = limpiarCodigo(manualCode.value);
+
+    if (!code) {
+      camStatus.textContent = "Escribe un código válido.";
+      return;
+    }
+
+    camStatus.textContent = "Buscando código manual...";
     await handleScan(code);
   }
 
@@ -420,6 +521,7 @@
   tabs.settings.onclick = () => setActiveTab("settings");
 
   modalClose.onclick = closeModal;
+
   modalBackdrop.onclick = (e) => {
     if (e.target === modalBackdrop) closeModal();
   };
@@ -431,16 +533,20 @@
 
   dangerClose.onclick = closeDangerModal;
   dangerCancel.onclick = closeDangerModal;
+
   dangerBackdrop.onclick = (e) => {
     if (e.target === dangerBackdrop) closeDangerModal();
   };
+
   dangerInput.addEventListener("input", validateDangerInput);
+
   dangerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && dangerInput.value.trim() === "BORRAR") {
       e.preventDefault();
       confirmClearHistory();
     }
   });
+
   dangerConfirm.onclick = confirmClearHistory;
 
   btnStart.onclick = startScannerUI;
@@ -460,6 +566,7 @@
       camStatus.textContent = "Detén el escáner antes de borrar el historial.";
       return;
     }
+
     openDangerModal();
   };
 

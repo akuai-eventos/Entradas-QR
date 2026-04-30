@@ -1,6 +1,6 @@
 window.MOCK_ATTENDEES = [
   {
-    code: "AKUAI-0001",
+    code: "AREFEST-0001",
     name: "María López",
     category: "VIP",
     photo: "",
@@ -8,7 +8,7 @@ window.MOCK_ATTENDEES = [
     checked_at: ""
   },
   {
-    code: "AKUAI-0002",
+    code: "AREFEST-0002",
     name: "Carlos Díaz",
     category: "General",
     photo: "",
@@ -16,7 +16,7 @@ window.MOCK_ATTENDEES = [
     checked_at: "2026-03-06 09:45"
   },
   {
-    code: "AKUAI-0003",
+    code: "AREFEST-0003",
     name: "Andrea Pérez",
     category: "Prensa",
     photo: "",

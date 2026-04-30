@@ -1,4 +1,4 @@
-const CACHE_NAME = "akuai-checkin-v1";
+const CACHE_NAME = "akuai-eventos-v2";
 const ASSETS = [
   "./",
   "./index.html",

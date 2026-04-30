@@ -1,7 +1,7 @@
 {
   "name": "AKUAI Check-in",
   "short_name": "AKUAI",
-  "description": "AKUAI Check-in para registro de entrada en eventos",
+  "description": "AKUAI Check-in para validación de entradas e ingreso al evento",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,5 +1,5 @@
 (function () {
-  const LS_ENTRIES = "akuai_entries_v5";
+  const LS_ENTRIES = "akuai_lai_checkin_entries_v1";
   const LS_THEME = "akuai_theme_v1";
 
   function loadEntries() {
@@ -15,17 +15,30 @@
   }
 
   function alreadyLocal(code) {
-    return loadEntries().some(e => e.code === code);
+    const cleanCode = String(code || "").trim().toUpperCase();
+
+    return loadEntries().some(e =>
+      String(e.code || "").trim().toUpperCase() === cleanCode
+    );
   }
 
   function addLocal(att) {
     const entries = loadEntries();
+
     entries.unshift({
-      code: att.code,
-      name: att.name,
-      category: att.category,
+      code: att.code || "",
+      id_grupo: att.id_grupo || "",
+      name: att.name || "",
+      category: att.category || "Entrada",
+      cedula: att.cedula || "",
+      whatsapp: att.whatsapp || "",
+      email: att.email || "",
+      modalidad: att.modalidad || "",
+      confirmacion_pago: att.confirmacion_pago || "",
+      checked_at: att.checked_at || "",
       ts: new Date().toISOString()
     });
+
     saveEntries(entries);
   }
 

@@ -49,7 +49,7 @@
   function getQrBoxSize(viewfinderWidth, viewfinderHeight) {
     const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
 
-    const edge = Math.floor(minEdge * 0.82);
+    const edge = Math.floor(minEdge * 0.65);
 
     return {
       width: edge,
@@ -89,7 +89,7 @@
       await html5Qr.start(
         cameraId,
         {
-          fps: 18,
+          fps: 30,
           qrbox: (viewfinderWidth, viewfinderHeight) =>
             getQrBoxSize(viewfinderWidth, viewfinderHeight),
           disableFlip: true,
